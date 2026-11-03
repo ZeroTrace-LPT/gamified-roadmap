@@ -2,6 +2,30 @@
 
 All notable changes to this project are recorded here.
 
+## [0.4.0] - 2026-11-03
+
+### Added
+- Quest board derived from every normalized workbook objective, with Main, Side, Certification, Lab, Project, and Boss quest views.
+- Lab and purple-team tags from explicit source wording; Boss markers use the workbook's Major milestone priority or explicit final/capstone/purple-team exercise titles.
+- Recommended next quests ordered by in-progress work, monthly roadmap sequence, and source sheet order.
+- Search and filters for quest class, progress state, and prerequisite readiness.
+- Prerequisite resolution for structured source references, including ambiguous and missing dependency handling.
+- Explicit user review of narrative workbook prerequisite notes, stored separately from the read-only source snapshot.
+- Additive SQLite schema v4 table for prerequisite review history.
+- Quest detail panel with source notes, XP rewards, prerequisites, status, and progress editing.
+
+### Changed
+- Added Quests to the desktop sidebar between Roadmap and Import data.
+- Application version is now 0.4.0.
+
+### Fixed
+- Quest recommendations exclude completed, locally blocked, dependency-locked, or unreviewed prerequisite-note items.
+
+### Known limitations
+- The workbook contains narrative prerequisite notes but no structured prerequisite edges. Notes are shown as written and require explicit user review; the app does not guess dependency links.
+- Items without a workbook XP reward remain unrewarded. Boss classification does not invent XP values.
+- Quest classification is a presentation layer; the imported roadmap and its source values remain unchanged.
+
 ## [0.3.0] - 2026-11-03
 
 ### Added

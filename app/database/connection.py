@@ -5,7 +5,7 @@ from __future__ import annotations
 import sqlite3
 from pathlib import Path
 
-SCHEMA_VERSION = 3
+SCHEMA_VERSION = 4
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS schema_migrations (
@@ -118,6 +118,11 @@ CREATE TABLE IF NOT EXISTS xp_transactions (
 
 CREATE INDEX IF NOT EXISTS idx_xp_transactions_item
     ON xp_transactions(item_id, transaction_id);
+
+CREATE TABLE IF NOT EXISTS quest_prerequisite_reviews (
+    item_id TEXT PRIMARY KEY REFERENCES roadmap_items(item_id) ON DELETE CASCADE,
+    verified_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
 
 CREATE TABLE IF NOT EXISTS import_issues (
     issue_id INTEGER PRIMARY KEY AUTOINCREMENT,

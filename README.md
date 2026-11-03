@@ -1,10 +1,10 @@
 # Cybersecurity Career Roadmap
 
-An offline-first Windows desktop application that turns the cybersecurity career workbook into a searchable, trackable, gamified roadmap. The project is developed in reviewable releases. **v0.3.0 adds workbook-backed XP rewards and career levels.**
+An offline-first Windows desktop application that turns the cybersecurity career workbook into a searchable, trackable, gamified roadmap. The project is developed in reviewable releases. **v0.4.0 adds a prerequisite-aware quest board.**
 
 The source workbook remains authoritative. The importer stores the source sheets, populated cells, formulas, saved formula values, and source coordinates in SQLite. It also creates normalized records for task-like rows so later releases can add progression features without losing workbook context. The original workbook is opened read-only and is never saved by the application.
 
-## v0.3.0 features
+## v0.4.0 features
 
 - Browse all normalized missions, skills, certifications, projects, and learning objectives in one roadmap.
 - Search workbook-backed names, descriptions, categories, phases, notes, resources, and source details.
@@ -17,11 +17,15 @@ The source workbook remains authoritative. The importer stores the source sheets
 - Keep other workbook-defined rewards as Track XP, separate from Career XP, so they do not change the workbook's career level thresholds.
 - Review current level, total/Career/Track XP, XP to next level, next source reward, monthly mission completion, and recent XP transactions on the dashboard.
 - Inspect each roadmap item's source reward and currently awarded balance.
+- Turn workbook objectives into Main, Side, Certification, Lab, Project, and Boss quests without adding replacement tasks.
+- See recommended next quests based on active progress, workbook order, source priorities, and prerequisite readiness.
+- Review structured prerequisite references and explicitly verify narrative prerequisite notes; confirmations stay in SQLite and do not change Excel data.
+- Identify Boss quests from explicit source milestone, capstone, or final exercise signals. Rewards remain the workbook's values.
 - Import `.xlsx` and `.xlsm` workbooks into versioned SQLite storage that preserves source values, formulas, cached values, validation ranges, chart references, and cell coordinates.
 
 Career XP includes monthly missions and all normalized project rows. The workbook's Dashboard formula currently refers to Projects rows 2–12, while the Projects sheet contains additional records through row 18; the importer reports that source inconsistency. This release includes all imported project rewards so records are not silently left out. The source formula itself remains preserved unchanged.
 
-Quests, skill trees, achievements, analytics, backup/restore, and Excel export are tracked in [ROADMAP.md](ROADMAP.md) for later releases.
+Skill trees, achievements, analytics, backup/restore, and Excel export are tracked in [ROADMAP.md](ROADMAP.md) for later releases.
 
 ## Screenshot
 
@@ -32,6 +36,8 @@ The first image shows the data-free first-run screen. The roadmap screenshot use
 ![Cybersecurity Career Roadmap v0.2 roadmap page with synthetic data](docs/screenshots/v0.2-roadmap.png)
 
 ![Cybersecurity Career Roadmap v0.3 dashboard with synthetic data](docs/screenshots/v0.3-dashboard.png)
+
+![Cybersecurity Career Roadmap v0.4 quest board with synthetic data](docs/screenshots/v0.4-quest-board.png)
 
 ## Installation
 
@@ -70,7 +76,7 @@ The script creates a PyInstaller onedir build at `dist\CybersecurityRoadmap\`. I
 python -m unittest discover -s tests -v
 ```
 
-The importer, database, progression, and XP service modules can be tested without starting Qt. The desktop interface requires PySide6.
+The importer, database, progression, quest, and XP service modules can be tested without starting Qt. The desktop interface requires PySide6.
 
 ## Architecture
 
@@ -79,6 +85,7 @@ app/
   config/       Local application paths
   database/     SQLite schema and migrations
   gamification/ Workbook-derived level and XP calculations
+  quests/      Source-derived quest classification rules
   importers/    Excel parsing and validation
   models/       Typed domain records
   services/     Database-backed application queries

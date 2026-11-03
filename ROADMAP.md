@@ -25,8 +25,9 @@ Each release has a defined review gate. Work on the next version starts after th
 
 ## v0.4.0 — Quest System
 
-- [ ] Main, side, certification, lab, and project quests
-- [ ] Mission selection from incomplete source objectives
+- [x] Main, side, certification, lab, and project quests
+- [x] Boss quest markers from explicit workbook milestone/capstone signals
+- [x] Mission selection from incomplete source objectives with prerequisite-aware readiness
 
 ## v0.5.0 — Skill Tree
 
