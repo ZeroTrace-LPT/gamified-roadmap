@@ -61,6 +61,7 @@ def _with_progress(row: Any) -> dict[str, Any]:
     )
     item["progress_note"] = override_note or ""
     item["has_progress_override"] = has_override
+    item["xp_awarded"] = int(item.get("xp_awarded") or 0)
     return item
 
 
@@ -70,7 +71,9 @@ def _roadmap_select() -> str:
                      p.progress_percent AS _override_percent,
                      p.date_started AS _override_date_started,
                      p.date_completed AS _override_date_completed,
-                     p.note AS _override_note
+                     p.note AS _override_note,
+                     COALESCE((SELECT SUM(x.amount) FROM xp_transactions x
+                               WHERE x.item_id=i.item_id), 0) AS xp_awarded
               FROM roadmap_items i
               LEFT JOIN roadmap_progress p ON p.item_id=i.item_id"""
 
@@ -253,6 +256,9 @@ def save_item_progress(connection: Any, item_id: str, update: ProgressUpdate) ->
                    updated_at=datetime('now')""",
             (item_id, update.status, update.progress_percent, started, completed, update.note.strip()),
         )
+    from app.services.gamification_service import sync_xp_awards
+
+    sync_xp_awards(connection)
 
 
 def clear_item_progress(connection: Any, item_id: str) -> None:
@@ -266,9 +272,14 @@ def clear_item_progress(connection: Any, item_id: str) -> None:
         raise KeyError("Roadmap item does not exist in the active workbook.")
     with connection:
         connection.execute("DELETE FROM roadmap_progress WHERE item_id=?", (item_id,))
+    from app.services.gamification_service import sync_xp_awards
+
+    sync_xp_awards(connection)
 
 
 def get_dashboard_data(connection: Any) -> dict[str, Any]:
+    from app.services.gamification_service import get_gamification_data
+
     workbook = get_active_workbook(connection)
     if workbook is None:
         return {"has_data": False}
@@ -292,34 +303,16 @@ def get_dashboard_data(connection: Any) -> dict[str, Any]:
     normalized = json.loads(workbook["summary_json"] or "{}")
     profile_name = normalized.get("profile_name") or "Cybersecurity Apprentice"
 
-    source_level = connection.execute(
-        "SELECT cached_value_json FROM source_cells WHERE workbook_id=? AND sheet_name='Dashboard' AND coordinate='E9'",
-        (workbook_id,),
-    ).fetchone()
-    source_xp = connection.execute(
-        "SELECT cached_value_json FROM source_cells WHERE workbook_id=? AND sheet_name='Dashboard' AND coordinate='E8'",
-        (workbook_id,),
-    ).fetchone()
-    level = json.loads(source_level[0]) if source_level and source_level[0] else 1
-    xp = json.loads(source_xp[0]) if source_xp and source_xp[0] else 0
-    if isinstance(level, dict):
-        level = level.get("value", 1)
-    if isinstance(xp, dict):
-        xp = xp.get("value", 0)
-    level_row = connection.execute(
-        """SELECT value_json FROM source_cells
-           WHERE workbook_id=? AND sheet_name='Dashboard' AND coordinate=?""",
-        (workbook_id, f"C{14 + int(level)}"),
-    ).fetchone()
-    level_title = json.loads(level_row[0]) if level_row and level_row[0] else "IT Apprentice"
+    gamification = get_gamification_data(connection)
 
     return {
         "has_data": True,
         "workbook": workbook,
         "profile_name": profile_name,
-        "level": int(level) if isinstance(level, (int, float)) else 1,
-        "level_title": level_title,
-        "xp": int(xp) if isinstance(xp, (int, float)) else 0,
+        "level": gamification["current_level"],
+        "level_title": gamification["level_title"],
+        "xp": gamification["career_xp"],
+        "gamification": gamification,
         "roadmap_total": total,
         "roadmap_completed": completed,
         "roadmap_in_progress": in_progress,

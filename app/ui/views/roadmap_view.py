@@ -37,7 +37,7 @@ class RoadmapView(QWidget):
     progress_edit_requested = Signal(str)
 
     TABLE_HEADERS = [
-        "Target", "Roadmap item", "Type", "Track / phase", "Local progress",
+        "Target", "Roadmap item", "Type", "Track / phase", "Local progress", "XP reward",
     ]
 
     def __init__(self):
@@ -118,11 +118,11 @@ class RoadmapView(QWidget):
         header.setSectionResizeMode(0, QHeaderView.ResizeMode.Fixed)
         self.table.setColumnWidth(0, 92)
         header.setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
-        for column, width in ((2, 125), (3, 165), (4, 145)):
+        for column, width in ((2, 120), (3, 145), (4, 140), (5, 92)):
             header.setSectionResizeMode(column, QHeaderView.ResizeMode.Fixed)
             self.table.setColumnWidth(column, width)
         self.timeline = QTreeWidget()
-        self.timeline.setHeaderLabels(["Target", "Roadmap item", "Local progress"])
+        self.timeline.setHeaderLabels(["Target", "Roadmap item", "Local progress", "XP"])
         self.timeline.setAlternatingRowColors(True)
         self.timeline.setSelectionMode(QTreeWidget.SelectionMode.SingleSelection)
         self.timeline.setRootIsDecorated(True)
@@ -130,6 +130,7 @@ class RoadmapView(QWidget):
         self.timeline.header().setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)
         self.timeline.header().setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
         self.timeline.header().setSectionResizeMode(2, QHeaderView.ResizeMode.ResizeToContents)
+        self.timeline.header().setSectionResizeMode(3, QHeaderView.ResizeMode.ResizeToContents)
         self.tabs.addTab(self.table, "Roadmap list")
         self.tabs.addTab(self.timeline, "Timeline")
 
@@ -184,6 +185,7 @@ class RoadmapView(QWidget):
         self.detail_origin.setWordWrap(True)
         self.detail_status = QLabel("")
         self.detail_status.setWordWrap(True)
+        self.detail_xp = self._detail_label()
         self.detail_progress = QProgressBar()
         self.detail_progress.setRange(0, 100)
         self.detail_dates = self._detail_label()
@@ -198,6 +200,10 @@ class RoadmapView(QWidget):
         layout.addWidget(self.detail_title)
         layout.addWidget(self.detail_origin)
         layout.addWidget(self.detail_status)
+        xp_caption = QLabel("SOURCE XP REWARD")
+        xp_caption.setObjectName("eyebrow")
+        layout.addWidget(xp_caption)
+        layout.addWidget(self.detail_xp)
         layout.addWidget(self.detail_progress)
         dates_caption = QLabel("LOCAL DATES")
         dates_caption.setObjectName("eyebrow")
@@ -288,11 +294,17 @@ class RoadmapView(QWidget):
                 record["item_type"].replace("_", " ").title(),
                 " · ".join(value for value in (record.get("category"), record.get("phase")) if value) or "—",
                 f"{record['progress_status']} · {record['progress_percent']}%",
+                f"{int(record['xp_reward']):,} XP" if record.get("xp_reward") is not None else "—",
             ]
             for column, value in enumerate(values):
                 cell = QTableWidgetItem(str(value))
                 cell.setFlags(cell.flags() & ~Qt.ItemFlag.ItemIsEditable)
                 cell.setToolTip(str(value))
+                if column == 5 and record.get("xp_reward") is not None:
+                    cell.setToolTip(
+                        f"Source reward: {int(record['xp_reward']):,} XP · "
+                        f"currently awarded: {int(record.get('xp_awarded') or 0):,} XP"
+                    )
                 if column == 0:
                     cell.setData(Qt.ItemDataRole.UserRole, record["item_id"])
                 self.table.setItem(row_index, column, cell)
@@ -341,6 +353,7 @@ class RoadmapView(QWidget):
                     record.get("target_period") or "Unscheduled",
                     record["name"],
                     f"{record['progress_status']} · {record['progress_percent']}%",
+                    f"{int(record['xp_reward']):,}" if record.get("xp_reward") is not None else "—",
                 ])
                 child.setData(0, Qt.ItemDataRole.UserRole, record["item_id"])
                 group.addChild(child)
@@ -399,6 +412,7 @@ class RoadmapView(QWidget):
             self.detail_title.setText("No matching roadmap items")
             self.detail_origin.setText("")
             self.detail_status.setText("")
+            self.detail_xp.setText("—")
             self.detail_progress.setValue(0)
             self.detail_progress.setFormat("0%")
             self.detail_dates.setText("—")
@@ -420,6 +434,18 @@ class RoadmapView(QWidget):
             f"Workbook status: {source_status}\n"
             f"Local status: {record['progress_status']} · {record['progress_percent']}%"
         )
+        if record.get("xp_reward") is None:
+            self.detail_xp.setText("No XP reward specified in the workbook.")
+        else:
+            scope = (
+                "Career XP · contributes to workbook level progression"
+                if record["item_type"] in {"monthly_mission", "project"}
+                else "Track XP · separate from the workbook's career level total"
+            )
+            self.detail_xp.setText(
+                f"Reward: {int(record['xp_reward']):,} XP · "
+                f"Currently awarded: {int(record.get('xp_awarded') or 0):,} XP\n{scope}"
+            )
         self.detail_progress.setValue(record["progress_percent"])
         self.detail_progress.setFormat(f"{record['progress_percent']}%")
         started = record.get("progress_date_started") or "Not recorded"

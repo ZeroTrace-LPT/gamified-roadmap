@@ -20,8 +20,8 @@ Each release has a defined review gate. Work on the next version starts after th
 
 ## v0.3.0 — Gamification
 
-- [ ] XP awards and level progression based on workbook progression
-- [ ] Progress calculations and reward history
+- [x] XP awards and level progression based on workbook progression
+- [x] Progress calculations and reward history
 
 ## v0.4.0 — Quest System
 

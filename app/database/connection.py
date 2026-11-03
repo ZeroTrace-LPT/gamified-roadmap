@@ -5,7 +5,7 @@ from __future__ import annotations
 import sqlite3
 from pathlib import Path
 
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS schema_migrations (
@@ -106,6 +106,18 @@ CREATE TABLE IF NOT EXISTS roadmap_progress (
     note TEXT NOT NULL DEFAULT '',
     updated_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
+
+CREATE TABLE IF NOT EXISTS xp_transactions (
+    transaction_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    item_id TEXT NOT NULL REFERENCES roadmap_items(item_id) ON DELETE CASCADE,
+    amount INTEGER NOT NULL CHECK (amount <> 0),
+    event_type TEXT NOT NULL CHECK (event_type IN ('award', 'reversal', 'adjustment')),
+    reason TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_xp_transactions_item
+    ON xp_transactions(item_id, transaction_id);
 
 CREATE TABLE IF NOT EXISTS import_issues (
     issue_id INTEGER PRIMARY KEY AUTOINCREMENT,
