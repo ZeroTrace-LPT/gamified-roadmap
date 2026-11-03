@@ -13,10 +13,10 @@ Each release has a defined review gate. Work on the next version starts after th
 
 ## v0.2.0 — Roadmap Engine
 
-- [ ] Rich roadmap detail view, categories, phases, and objectives
-- [ ] Progress editing and source-aware status handling
-- [ ] Search and filters
-- [ ] Timeline views
+- [x] Rich roadmap detail view, categories, phases, and objectives
+- [x] Progress editing and source-aware status handling
+- [x] Search and filters
+- [x] Timeline views by month, year, phase, and source sheet order
 
 ## v0.3.0 — Gamification
 

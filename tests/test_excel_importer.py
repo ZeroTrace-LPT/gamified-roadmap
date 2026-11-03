@@ -10,6 +10,14 @@ from openpyxl import Workbook, load_workbook
 
 from app.database.connection import connect_database
 from app.importers.excel_importer import import_excel
+from app.models.roadmap import ProgressUpdate
+from app.services.roadmap_service import (
+    clear_item_progress,
+    get_dashboard_data,
+    get_roadmap_item,
+    get_roadmap_items,
+    save_item_progress,
+)
 
 
 class ExcelImporterTests(unittest.TestCase):
@@ -103,6 +111,127 @@ class ExcelImporterTests(unittest.TestCase):
         self.assertNotEqual(first.workbook_id, second.workbook_id)
         self.assertEqual(self.connection.execute("SELECT COUNT(*) FROM workbooks").fetchone()[0], 2)
         self.assertEqual(self.connection.execute("SELECT COUNT(*) FROM roadmap_items").fetchone()[0], 10)
+
+    def test_progress_is_local_and_does_not_replace_source_status(self) -> None:
+        import_excel(self.connection, self.workbook_path)
+        mission = get_roadmap_items(self.connection, item_type="monthly_mission")[0]
+
+        save_item_progress(
+            self.connection,
+            mission["item_id"],
+            ProgressUpdate(
+                status="In progress",
+                progress_percent=45,
+                date_started="2026-10-31",
+                note="Local note, separate from the workbook.",
+            ),
+        )
+        updated = get_roadmap_item(self.connection, mission["item_id"])
+        self.assertEqual(updated["status"], "Not Started")
+        self.assertEqual(updated["progress_status"], "In progress")
+        self.assertEqual(updated["progress_percent"], 45)
+        self.assertEqual(updated["progress_date_started"], "2026-10-31")
+        self.assertEqual(updated["progress_note"], "Local note, separate from the workbook.")
+        source_status = self.connection.execute(
+            "SELECT value_json FROM source_cells WHERE sheet_name='Roadmap' AND coordinate='G2'"
+        ).fetchone()[0]
+        self.assertEqual(source_status, '"Not Started"')
+        dashboard = get_dashboard_data(self.connection)
+        self.assertEqual(dashboard["roadmap_in_progress"], 1)
+        self.assertEqual(dashboard["roadmap_completed"], 0)
+        self.assertTrue(import_excel(self.connection, self.workbook_path).already_imported)
+        self.assertEqual(get_roadmap_item(self.connection, mission["item_id"])["progress_percent"], 45)
+
+        save_item_progress(
+            self.connection,
+            mission["item_id"],
+            ProgressUpdate(
+                status="Completed",
+                progress_percent=100,
+                date_started="2026-10-31",
+                date_completed="2026-11-03",
+            ),
+        )
+        dashboard = get_dashboard_data(self.connection)
+        self.assertEqual(dashboard["roadmap_completed"], 1)
+        self.assertEqual(dashboard["roadmap_percent"], 100)
+        self.assertIsNone(dashboard["current_mission"])
+
+    def test_progress_validation_and_reset(self) -> None:
+        import_excel(self.connection, self.workbook_path)
+        mission = get_roadmap_items(self.connection, item_type="monthly_mission")[0]
+        with self.assertRaisesRegex(ValueError, "100%"):
+            save_item_progress(
+                self.connection,
+                mission["item_id"],
+                ProgressUpdate(status="Completed", progress_percent=80),
+            )
+        with self.assertRaisesRegex(ValueError, "YYYY-MM-DD"):
+            save_item_progress(
+                self.connection,
+                mission["item_id"],
+                ProgressUpdate(status="In progress", progress_percent=20, date_started="2026-2-1"),
+            )
+        with self.assertRaisesRegex(ValueError, "earlier than"):
+            save_item_progress(
+                self.connection,
+                mission["item_id"],
+                ProgressUpdate(
+                    status="Completed", progress_percent=100,
+                    date_started="2026-11-03", date_completed="2026-11-02",
+                ),
+            )
+
+        save_item_progress(
+            self.connection,
+            mission["item_id"],
+            ProgressUpdate(status="Blocked", progress_percent=20, note="Waiting on lab access."),
+        )
+        clear_item_progress(self.connection, mission["item_id"])
+        reset = get_roadmap_item(self.connection, mission["item_id"])
+        self.assertEqual(reset["progress_status"], "Not started")
+        self.assertEqual(reset["progress_percent"], 0)
+        self.assertFalse(reset["has_progress_override"])
+
+    def test_search_filters_and_year_sort_use_source_fields(self) -> None:
+        import_excel(self.connection, self.workbook_path)
+        search = get_roadmap_items(self.connection, query="linux")
+        self.assertEqual(
+            {item["name"] for item in search},
+            {"Network+ / Linux / Git", "Homelab v1"},
+        )
+        skills = get_roadmap_items(
+            self.connection,
+            item_type="skill",
+            category="Foundation",
+            sort_by="Phase",
+        )
+        self.assertEqual([item["name"] for item in skills], ["Networking"])
+        completed_source = get_roadmap_items(self.connection, source_status="Completed")
+        self.assertIn("CompTIA A+", [item["name"] for item in completed_source])
+        year_items = get_roadmap_items(self.connection, year="2026", sort_by="Year")
+        self.assertEqual([item["name"] for item in year_items], ["Network+ / Linux / Git"])
+        self.assertEqual(get_roadmap_items(self.connection, query="%"), [])
+
+    def test_v1_database_upgrade_preserves_imported_rows(self) -> None:
+        import_excel(self.connection, self.workbook_path)
+        item_count = self.connection.execute("SELECT COUNT(*) FROM roadmap_items").fetchone()[0]
+        source_count = self.connection.execute("SELECT COUNT(*) FROM source_cells").fetchone()[0]
+        self.connection.execute("DROP TABLE roadmap_progress")
+        self.connection.execute("DELETE FROM schema_migrations WHERE version=2")
+        self.connection.commit()
+        self.connection.close()
+
+        self.connection = connect_database(self.database_path)
+        self.assertEqual(self.connection.execute("SELECT COUNT(*) FROM roadmap_items").fetchone()[0], item_count)
+        self.assertEqual(self.connection.execute("SELECT COUNT(*) FROM source_cells").fetchone()[0], source_count)
+        self.assertEqual(
+            self.connection.execute("SELECT MAX(version) FROM schema_migrations").fetchone()[0], 2
+        )
+        self.assertEqual(
+            self.connection.execute("SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='roadmap_progress'").fetchone()[0],
+            1,
+        )
 
 
 if __name__ == "__main__":
