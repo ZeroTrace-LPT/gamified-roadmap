@@ -37,8 +37,8 @@ Each release has a defined review gate. Work on the next version starts after th
 
 ## v0.6.0 — Dashboard
 
-- [ ] Player profile, current mission, next objectives, and skill overview
-- [ ] Progress summaries driven by the SQLite database
+- [x] Player profile, current mission, next objectives, and skill overview
+- [x] Progress summaries driven by the SQLite database
 
 ## v0.7.0 — Certifications, Projects, and Labs
 

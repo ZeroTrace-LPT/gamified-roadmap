@@ -2,6 +2,25 @@
 
 All notable changes to this project are recorded here.
 
+## [0.6.0] - 2026-11-03
+
+### Added
+- Career dashboard profile with workbook-defined role levels, current phase, total XP, level progress, and XP to the next source-defined level.
+- Current mission and next three recommendations from the prerequisite-aware quest service.
+- Overall SQLite-backed roadmap completion, plus skill, certification, project, lab-tagged objective, learning-hour, and monthly mission summaries.
+- Skill overview bars grouped by source Track and reflecting local progress overlays.
+- Dashboard shortcuts to roadmap, quests, skill tree, and workbook import, plus direct current-mission progress editing.
+- Scrollable dashboard layout for smaller displays and larger roadmaps.
+
+### Changed
+- Application version is now 0.6.0.
+- Dashboard mission recommendations now use the same workbook-order and prerequisite-readiness rules as the quest board.
+
+### Known limitations
+- Skill overview shows source-defined Skill Matrix and Beyond 25 branches only; prerequisite edges remain absent unless the workbook explicitly provides them.
+- Learning-hour totals appear only when estimates are recorded in the source workbook.
+- Historical trend charts, achievements, and dedicated certification/project/lab pages remain scheduled for later releases.
+
 ## [0.5.0] - 2026-11-03
 
 ### Added

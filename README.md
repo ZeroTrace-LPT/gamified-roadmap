@@ -1,10 +1,10 @@
 # Cybersecurity Career Roadmap
 
-An offline-first Windows desktop application that turns the cybersecurity career workbook into a searchable, trackable, gamified roadmap. The project is developed in reviewable releases. **v0.5.0 adds a workbook-backed cybersecurity skill tree.**
+An offline-first Windows desktop application that turns the cybersecurity career workbook into a searchable, trackable, gamified roadmap. The project is developed in reviewable releases. **v0.6.0 adds a SQLite-backed career dashboard with current missions, next objectives, profile progression, and skill overview.**
 
 The source workbook remains authoritative. The importer stores the source sheets, populated cells, formulas, saved formula values, and source coordinates in SQLite. It also creates normalized records for task-like rows so later releases can add progression features without losing workbook context. The original workbook is opened read-only and is never saved by the application.
 
-## v0.5.0 features
+## v0.6.0 features
 
 - Browse all normalized missions, skills, certifications, projects, and learning objectives in one roadmap.
 - Search workbook-backed names, descriptions, categories, phases, notes, resources, and source details.
@@ -25,6 +25,10 @@ The source workbook remains authoritative. The importer stores the source sheets
 - View workbook target ages, specialization timeframes, source XP, progress, and specialization resources.
 - See available, locked, or review-needed skill states from explicit prerequisite data. The tree does not infer skill dependencies.
 - Import explicit prerequisite columns from workbook sheets as structured links while keeping narrative prerequisite notes separate.
+- Review the dashboard profile using the workbook's level titles, current role, XP, XP to next level, and current phase.
+- Continue the highest-ranked prerequisite-ready mission and see the next three recommended source objectives.
+- Track overall completion and category summaries from local SQLite progress, with separate monthly mission completion.
+- Compare local skill progress across workbook-defined skill branches and jump directly to the roadmap, quest board, or skill tree.
 - Import `.xlsx` and `.xlsm` workbooks into versioned SQLite storage that preserves source values, formulas, cached values, validation ranges, chart references, and cell coordinates.
 
 Career XP includes monthly missions and all normalized project rows. The workbook's Dashboard formula currently refers to Projects rows 2–12, while the Projects sheet contains additional records through row 18; the importer reports that source inconsistency. This release includes all imported project rewards so records are not silently left out. The source formula itself remains preserved unchanged.
@@ -33,7 +37,7 @@ Achievements, analytics, backup/restore, and Excel export are tracked in [ROADMA
 
 ## Screenshot
 
-The first image shows the data-free first-run screen. The roadmap, quest, and skill tree screenshots use synthetic test data. The app reads the workbook without modifying it and keeps imported progress data in the user's local SQLite database.
+The first image shows the data-free first-run screen. The roadmap, quest, skill tree, and dashboard screenshots use synthetic test data. The app reads the workbook without modifying it and keeps imported progress data in the user's local SQLite database.
 
 ![Cybersecurity Career Roadmap first-run dashboard](docs/screenshots/v0.1-first-run.png)
 
@@ -44,6 +48,8 @@ The first image shows the data-free first-run screen. The roadmap, quest, and sk
 ![Cybersecurity Career Roadmap v0.4 quest board with synthetic data](docs/screenshots/v0.4-quest-board.png)
 
 ![Cybersecurity Career Roadmap v0.5 skill tree with synthetic data](docs/screenshots/v0.5-skill-tree.png)
+
+![Cybersecurity Career Roadmap v0.6 dashboard with synthetic data](docs/screenshots/v0.6-dashboard.png)
 
 ## Installation
 
@@ -74,7 +80,7 @@ An explicit database can be selected with `--database`. Import findings are also
 .\scripts\build_windows.ps1
 ```
 
-The script creates a PyInstaller onedir build at `dist\CybersecurityRoadmap\`. It excludes optional image, accelerated XML, and numerical libraries that this app does not use. A one-file release build and fresh-machine installation checks are planned for the release-candidate stage.
+The script creates a versioned PyInstaller onedir build at `dist\CybersecurityRoadmap-v<VERSION>\` (for example, `dist\CybersecurityRoadmap-v0.6.0\`). It excludes optional image, accelerated XML, and numerical libraries that this app does not use. A one-file release build and fresh-machine installation checks are planned for the release-candidate stage.
 
 ## Development
 

@@ -1,6 +1,8 @@
 $ErrorActionPreference = "Stop"
 $projectRoot = Split-Path -Parent $PSScriptRoot
 Set-Location $projectRoot
+$version = (Get-Content "VERSION" -Raw).Trim()
+$appName = "CybersecurityRoadmap-v$version"
 
 if (-not (Test-Path ".venv\Scripts\python.exe")) {
     python -m venv .venv
@@ -29,7 +31,7 @@ try {
         --noconfirm `
         --clean `
         --windowed `
-        --name CybersecurityRoadmap `
+        --name $appName `
         --exclude-module numpy `
         --exclude-module PIL `
         --exclude-module lxml `
@@ -43,4 +45,4 @@ finally {
     $env:PATH = $originalPath
 }
 
-Write-Host "Build complete: $projectRoot\dist\CybersecurityRoadmap\CybersecurityRoadmap.exe"
+Write-Host "Build complete: $projectRoot\dist\$appName\$appName.exe"

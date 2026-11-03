@@ -278,47 +278,118 @@ def clear_item_progress(connection: Any, item_id: str) -> None:
 
 
 def get_dashboard_data(connection: Any) -> dict[str, Any]:
+    from app.quests.rules import classify_quest
     from app.services.gamification_service import get_gamification_data
+    from app.services.quest_service import get_quest_board
+    from app.services.skill_tree_service import get_skill_tree
 
     workbook = get_active_workbook(connection)
     if workbook is None:
         return {"has_data": False}
 
-    workbook_id = workbook["workbook_id"]
     missions = get_core_roadmap(connection)
     total = len(missions)
     completed = sum(1 for item in missions if item["progress_status"] == "Completed")
     in_progress = sum(1 for item in missions if item["progress_status"] == "In progress")
     now_month = date.today().strftime("%Y-%m")
-    current = next((
-        item for item in missions
-        if item["target_period"] >= now_month and item["progress_status"] != "Completed"
-    ), None)
-    if current is None:
-        current = next((item for item in missions if item["progress_status"] != "Completed"), None)
+    all_items = get_roadmap_items(connection, sort_by="Source")
+    items_total = len(all_items)
+    overall_completed = sum(item["progress_status"] == "Completed" for item in all_items)
+    overall_in_progress = sum(item["progress_status"] == "In progress" for item in all_items)
 
-    items_total = connection.execute(
-        "SELECT COUNT(*) FROM roadmap_items WHERE workbook_id=?", (workbook_id,)
-    ).fetchone()[0]
+    def type_summary(item_type: str) -> dict[str, int]:
+        selected = [item for item in all_items if item["item_type"] == item_type]
+        return {
+            "total": len(selected),
+            "completed": sum(item["progress_status"] == "Completed" for item in selected),
+            "in_progress": sum(item["progress_status"] == "In progress" for item in selected),
+        }
+
+    lab_items = []
+    for item in all_items:
+        classification = classify_quest(item)
+        if "Lab" in classification.tags or classification.quest_type == "Lab Quest":
+            lab_items.append(item)
+    hour_values = [
+        float(item["estimated_hours"])
+        for item in all_items
+        if item.get("estimated_hours") is not None
+    ]
+    skill_tree = get_skill_tree(connection)
+    skill_branches = []
+    for branch in skill_tree["branches"]:
+        branch_items = branch["items"]
+        count = len(branch_items)
+        skill_branches.append({
+            "name": branch["name"],
+            "total": count,
+            "completed": sum(item["progress_status"] == "Completed" for item in branch_items),
+            "in_progress": sum(item["progress_status"] == "In progress" for item in branch_items),
+            "progress_percent": round(
+                sum(int(item["progress_percent"]) for item in branch_items) / count
+            ) if count else 0,
+        })
+    quest_board = get_quest_board(connection)
+    recommendations = quest_board["recommendations"]
+    current = recommendations[0] if recommendations else None
+    next_objectives = recommendations[1:4]
     normalized = json.loads(workbook["summary_json"] or "{}")
     profile_name = normalized.get("profile_name") or "Cybersecurity Apprentice"
 
     gamification = get_gamification_data(connection)
 
+    statistics = {
+        "monthly_missions": {
+            "total": total,
+            "completed": completed,
+            "in_progress": in_progress,
+            "percent": completed / total * 100 if total else 0,
+        },
+        "skills": type_summary("skill"),
+        "specializations": type_summary("specialization"),
+        "certifications": type_summary("certification"),
+        "projects": type_summary("project"),
+        "labs": {
+            "total": len(lab_items),
+            "completed": sum(item["progress_status"] == "Completed" for item in lab_items),
+            "in_progress": sum(item["progress_status"] == "In progress" for item in lab_items),
+        },
+        "overall": {
+            "total": items_total,
+            "completed": overall_completed,
+            "in_progress": overall_in_progress,
+            "percent": overall_completed / items_total * 100 if items_total else 0,
+        },
+        "learning_hours": sum(hour_values) if hour_values else None,
+        "learning_hours_recorded": bool(hour_values),
+    }
+    current_phase = "Not specified in workbook"
+    if current:
+        current_phase = str(current.get("phase") or current.get("target_period") or current_phase)
+
     return {
         "has_data": True,
         "workbook": workbook,
         "profile_name": profile_name,
+        "current_role": gamification["level_title"] or "Role not specified in workbook",
+        "current_phase": current_phase,
         "level": gamification["current_level"],
         "level_title": gamification["level_title"],
         "xp": gamification["career_xp"],
         "gamification": gamification,
+        "statistics": statistics,
+        "skill_branches": skill_branches,
         "roadmap_total": total,
         "roadmap_completed": completed,
         "roadmap_in_progress": in_progress,
         "roadmap_percent": (completed / total * 100) if total else 0,
+        "overall_total": items_total,
+        "overall_completed": overall_completed,
+        "overall_in_progress": overall_in_progress,
+        "overall_percent": statistics["overall"]["percent"],
         "record_total": items_total,
         "current_mission": current,
+        "next_objectives": next_objectives,
         "current_month": now_month,
     }
 

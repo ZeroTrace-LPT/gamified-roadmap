@@ -67,7 +67,13 @@ class MainWindow(QMainWindow):
         sidebar_layout.addSpacing(18)
 
         self.pages = QStackedWidget()
-        self.dashboard = DashboardView(self.choose_workbook, lambda: self.navigate(1))
+        self.dashboard = DashboardView(
+            self.choose_workbook,
+            lambda: self.navigate(1),
+            lambda: self.navigate(2),
+            lambda: self.navigate(3),
+        )
+        self.dashboard.progress_edit_requested.connect(self.edit_item_progress)
         self.roadmap = RoadmapView()
         self.roadmap.filters_changed.connect(self.refresh_roadmap)
         self.roadmap.progress_edit_requested.connect(self.edit_item_progress)

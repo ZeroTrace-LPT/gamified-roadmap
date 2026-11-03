@@ -169,7 +169,51 @@ class ExcelImporterTests(unittest.TestCase):
         dashboard = get_dashboard_data(self.connection)
         self.assertEqual(dashboard["roadmap_completed"], 1)
         self.assertEqual(dashboard["roadmap_percent"], 100)
-        self.assertIsNone(dashboard["current_mission"])
+        self.assertEqual(dashboard["current_mission"]["item_type"], "skill")
+        self.assertEqual(dashboard["statistics"]["monthly_missions"]["percent"], 100)
+
+    def test_dashboard_uses_local_progress_for_overall_and_skill_summaries(self) -> None:
+        import_excel(self.connection, self.workbook_path)
+        initial = get_dashboard_data(self.connection)
+        self.assertEqual(initial["profile_name"], "Local Test Profile")
+        self.assertEqual(initial["current_role"], "IT Apprentice")
+        self.assertEqual(initial["statistics"]["overall"]["total"], 5)
+        self.assertEqual(initial["statistics"]["overall"]["completed"], 1)
+        self.assertEqual(initial["statistics"]["certifications"]["completed"], 1)
+        self.assertEqual(initial["statistics"]["skills"]["total"], 1)
+        self.assertEqual(initial["skill_branches"][0]["name"], "Foundation")
+        self.assertEqual(initial["skill_branches"][0]["progress_percent"], 0)
+        self.assertIsNotNone(initial["current_mission"])
+        recommendations = get_quest_board(self.connection)["recommendations"]
+        self.assertEqual(initial["current_mission"]["item_id"], recommendations[0]["item_id"])
+        self.assertEqual(
+            [item["item_id"] for item in initial["next_objectives"]],
+            [item["item_id"] for item in recommendations[1:4]],
+        )
+        self.assertEqual(len(initial["next_objectives"]), 3)
+
+        skill = get_roadmap_items(self.connection, item_type="skill")[0]
+        save_item_progress(
+            self.connection,
+            skill["item_id"],
+            ProgressUpdate(status="In progress", progress_percent=60),
+        )
+        updated = get_dashboard_data(self.connection)
+        self.assertEqual(updated["statistics"]["overall"]["completed"], 1)
+        self.assertEqual(updated["statistics"]["overall"]["in_progress"], 1)
+        self.assertEqual(updated["skill_branches"][0]["in_progress"], 1)
+        self.assertEqual(updated["skill_branches"][0]["progress_percent"], 60)
+
+        save_item_progress(
+            self.connection,
+            skill["item_id"],
+            ProgressUpdate(status="Completed", progress_percent=100),
+        )
+        completed = get_dashboard_data(self.connection)
+        self.assertEqual(completed["statistics"]["overall"]["completed"], 2)
+        self.assertEqual(completed["skill_branches"][0]["completed"], 1)
+        self.assertEqual(completed["skill_branches"][0]["progress_percent"], 100)
+        self.assertGreater(completed["gamification"]["total_xp"], initial["gamification"]["total_xp"])
 
     def test_progress_validation_and_reset(self) -> None:
         import_excel(self.connection, self.workbook_path)
