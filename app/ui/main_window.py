@@ -19,6 +19,7 @@ from app.services.roadmap_service import (
     get_roadmap_items,
     save_item_progress,
 )
+from app.services.gamification_service import get_gamification_data, sync_xp_awards
 from app.services.roadmap_service import (
     get_active_workbook,
     get_dashboard_data,
@@ -101,6 +102,7 @@ class MainWindow(QMainWindow):
         self.nav_buttons[index].setChecked(True)
 
     def refresh_pages(self) -> None:
+        sync_xp_awards(self.connection)
         dashboard_data = get_dashboard_data(self.connection)
         self.dashboard.refresh(dashboard_data)
         self.roadmap.set_filter_options(get_roadmap_filter_options(self.connection))
@@ -116,6 +118,7 @@ class MainWindow(QMainWindow):
         self.roadmap.refresh(records)
 
     def edit_item_progress(self, item_id: str) -> None:
+        before = get_gamification_data(self.connection)
         record = get_roadmap_item(self.connection, item_id)
         if record is None:
             QMessageBox.warning(self, "Roadmap item unavailable", "This item is no longer in the active workbook.")
@@ -144,7 +147,18 @@ class MainWindow(QMainWindow):
             QMessageBox.warning(self, "Progress not saved", str(error))
             return
         self.refresh_pages()
-        self.statusBar().showMessage(message)
+        after = get_gamification_data(self.connection)
+        career_delta = after["career_xp"] - before["career_xp"]
+        total_delta = after["total_xp"] - before["total_xp"]
+        if after.get("current_level") and after.get("current_level") > (before.get("current_level") or 0):
+            message = f"LEVEL UP · Level {after['current_level']} — {after['level_title']}"
+        elif career_delta > 0:
+            message = f"+{career_delta:,} Career XP · {message}"
+        elif total_delta > 0:
+            message = f"+{total_delta:,} track XP · {message}"
+        elif total_delta < 0:
+            message = f"{total_delta:,} XP reversed · {message}"
+        self.statusBar().showMessage(message, 8000)
 
     def choose_workbook(self) -> None:
         filename, _ = QFileDialog.getOpenFileName(

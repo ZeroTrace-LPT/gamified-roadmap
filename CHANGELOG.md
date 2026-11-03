@@ -2,6 +2,30 @@
 
 All notable changes to this project are recorded here.
 
+## [0.3.0] - 2026-11-03
+
+### Added
+- Workbook-driven XP award and reversal history stored in an additive SQLite v3 table.
+- Career XP and levels parsed from the source Dashboard level table, including source titles, XP bands, unlock requirements, and rewards.
+- Separate Track XP for completed items with workbook-defined rewards outside monthly missions and projects.
+- Dashboard XP cards, level progress, next source reward, recent XP activity, and mission reward display.
+- Source reward and awarded XP details in the roadmap list, timeline, and detail panel.
+- Automatic XP synchronization when the active workbook is opened, imported, or progress is edited/reset.
+- Gamification tests for source-level parsing, level caps, award idempotency, reversal, re-completion, and schema upgrades.
+
+### Changed
+- Career XP includes every normalized project record. The workbook formula's Projects range stops at row 12 although six more project records exist through row 18; the source validation warning remains preserved.
+- Application version is now 0.3.0.
+
+### Fixed
+- XP availability and completed-reward counts now use the same status precedence as the roadmap progress view.
+- Awarded item counts exclude items whose XP balance was fully reversed.
+
+### Known limitations
+- The workbook defines ten career levels and no post-Level-10 progression; the app caps progression at the last level present in the source.
+- Workbook formulas and cached values are preserved but not recalculated by the application.
+- Quest selection, the visual skill tree, achievements, and historical analytics remain scheduled for later releases.
+
 ## [0.2.0] - 2026-11-03
 
 ### Added

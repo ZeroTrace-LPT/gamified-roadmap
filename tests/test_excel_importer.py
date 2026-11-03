@@ -10,7 +10,9 @@ from openpyxl import Workbook, load_workbook
 
 from app.database.connection import connect_database
 from app.importers.excel_importer import import_excel
+from app.gamification.progression import calculate_progression, parse_level_definitions
 from app.models.roadmap import ProgressUpdate
+from app.services.gamification_service import get_gamification_data, sync_xp_awards
 from app.services.roadmap_service import (
     clear_item_progress,
     get_dashboard_data,
@@ -41,6 +43,15 @@ class ExcelImporterTests(unittest.TestCase):
         dashboard["E8"] = "=SUM(Roadmap!H2:H63)"
         dashboard["E9"] = 1
         dashboard["C15"] = "IT Apprentice"
+        for column, value in enumerate(("Level", "XP Band", "Title", "Unlock", "Reward"), 1):
+            dashboard.cell(14, column, value)
+        for row, values in enumerate((
+            (1, "0-99", "IT Apprentice", "Start", "Build homelab"),
+            (2, "100-199", "Network Scout", "100 XP", "Network+"),
+            (3, "200+", "Security Practitioner", "200 XP", "Capstone"),
+        ), 15):
+            for column, value in enumerate(values, 1):
+                dashboard.cell(row, column, value)
 
         roadmap = workbook.create_sheet("Roadmap")
         roadmap.append(["Month", "Age", "Year", "Track", "Focus", "Monthly Mission", "Status", "XP", "Done?", "Notes"])
@@ -193,6 +204,82 @@ class ExcelImporterTests(unittest.TestCase):
         self.assertEqual(reset["progress_percent"], 0)
         self.assertFalse(reset["has_progress_override"])
 
+    def test_progression_uses_source_levels_and_caps_at_last_level(self) -> None:
+        import_excel(self.connection, self.workbook_path)
+        levels = parse_level_definitions({
+            "A14": "Level", "B14": "XP Band", "C14": "Title", "D14": "Unlock", "E14": "Reward",
+            "A15": 1, "B15": "0–499", "C15": "IT Apprentice", "D15": "Start", "E15": "Build homelab",
+            "A16": 2, "B16": "500–999", "C16": "Network Scout", "D16": "500 XP", "E16": "Network+",
+            "A17": 10, "B17": "5,000+", "C17": "Cybersecurity Practitioner", "D17": "5,000 XP", "E17": "Final capstone",
+        })
+        self.assertEqual([level.level for level in levels], [1, 2, 10])
+        at_level_two = calculate_progression(500, levels)
+        self.assertEqual(at_level_two["current_level"], 2)
+        self.assertEqual(at_level_two["level_title"], "Network Scout")
+        at_max = calculate_progression(10_000, levels)
+        self.assertEqual(at_max["current_level"], 10)
+        self.assertTrue(at_max["is_max_level"])
+        self.assertEqual(at_max["next_level_reward"], "")
+
+    def test_source_rewards_award_once_reversal_and_recompletion(self) -> None:
+        import_excel(self.connection, self.workbook_path)
+        mission = get_roadmap_items(self.connection, item_type="monthly_mission")[0]
+        skill = get_roadmap_items(self.connection, item_type="skill")[0]
+        project = get_roadmap_items(self.connection, item_type="project")[0]
+
+        initial = get_gamification_data(self.connection)
+        self.assertEqual((initial["career_xp"], initial["track_xp"]), (0, 0))
+        self.assertEqual(initial["current_level"], 1)
+
+        update_completed = ProgressUpdate(status="Completed", progress_percent=100)
+        save_item_progress(self.connection, mission["item_id"], update_completed)
+        save_item_progress(self.connection, skill["item_id"], update_completed)
+        save_item_progress(self.connection, project["item_id"], update_completed)
+        self.assertEqual(sync_xp_awards(self.connection), 0)
+
+        earned = get_gamification_data(self.connection)
+        self.assertEqual(earned["career_xp"], 200)
+        self.assertEqual(earned["track_xp"], 500)
+        self.assertEqual(earned["total_xp"], 700)
+        self.assertEqual(earned["current_level"], 3)
+        self.assertEqual(earned["awarded_items"], 3)
+        self.assertEqual(earned["completed_reward_items"], 3)
+        self.assertEqual(earned["xp_available"], 0)
+
+        clear_item_progress(self.connection, mission["item_id"])
+        reset = get_gamification_data(self.connection)
+        self.assertEqual(reset["career_xp"], 100)
+        self.assertEqual(reset["current_level"], 2)
+        self.assertEqual(reset["awarded_items"], 2)
+        self.assertEqual(
+            self.connection.execute(
+                "SELECT COUNT(*) FROM xp_transactions WHERE item_id=?", (mission["item_id"],)
+            ).fetchone()[0],
+            2,
+        )
+
+        save_item_progress(self.connection, mission["item_id"], update_completed)
+        restored = get_gamification_data(self.connection)
+        self.assertEqual(restored["career_xp"], 200)
+        self.assertEqual(restored["total_xp"], 700)
+        self.assertEqual(restored["awarded_items"], 3)
+
+    def test_imported_source_completion_awards_without_local_override(self) -> None:
+        workbook = load_workbook(self.workbook_path)
+        workbook["Projects"]["G2"] = "Done"
+        workbook.save(self.workbook_path)
+        import_excel(self.connection, self.workbook_path)
+
+        self.assertEqual(sync_xp_awards(self.connection), 1)
+        project = get_roadmap_items(self.connection, item_type="project")[0]
+        self.assertEqual(project["status"], "Done")
+        self.assertEqual(project["progress_status"], "Completed")
+        self.assertEqual(project["xp_awarded"], 100)
+        data = get_gamification_data(self.connection)
+        self.assertEqual(data["career_xp"], 100)
+        self.assertEqual(data["current_level"], 2)
+        self.assertEqual(sync_xp_awards(self.connection), 0)
+
     def test_search_filters_and_year_sort_use_source_fields(self) -> None:
         import_excel(self.connection, self.workbook_path)
         search = get_roadmap_items(self.connection, query="linux")
@@ -218,7 +305,8 @@ class ExcelImporterTests(unittest.TestCase):
         item_count = self.connection.execute("SELECT COUNT(*) FROM roadmap_items").fetchone()[0]
         source_count = self.connection.execute("SELECT COUNT(*) FROM source_cells").fetchone()[0]
         self.connection.execute("DROP TABLE roadmap_progress")
-        self.connection.execute("DELETE FROM schema_migrations WHERE version=2")
+        self.connection.execute("DROP TABLE xp_transactions")
+        self.connection.execute("DELETE FROM schema_migrations WHERE version IN (2, 3)")
         self.connection.commit()
         self.connection.close()
 
@@ -226,10 +314,14 @@ class ExcelImporterTests(unittest.TestCase):
         self.assertEqual(self.connection.execute("SELECT COUNT(*) FROM roadmap_items").fetchone()[0], item_count)
         self.assertEqual(self.connection.execute("SELECT COUNT(*) FROM source_cells").fetchone()[0], source_count)
         self.assertEqual(
-            self.connection.execute("SELECT MAX(version) FROM schema_migrations").fetchone()[0], 2
+            self.connection.execute("SELECT MAX(version) FROM schema_migrations").fetchone()[0], 3
         )
         self.assertEqual(
             self.connection.execute("SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='roadmap_progress'").fetchone()[0],
+            1,
+        )
+        self.assertEqual(
+            self.connection.execute("SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='xp_transactions'").fetchone()[0],
             1,
         )
 
