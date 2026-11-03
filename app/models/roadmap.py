@@ -3,7 +3,24 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, Literal
+
+
+ProgressStatus = Literal["Not started", "In progress", "Completed", "Blocked"]
+PROGRESS_STATUSES: tuple[ProgressStatus, ...] = (
+    "Not started", "In progress", "Completed", "Blocked",
+)
+
+
+@dataclass(frozen=True)
+class ProgressUpdate:
+    """User-owned progress data, separate from the immutable imported source status."""
+
+    status: ProgressStatus
+    progress_percent: int
+    date_started: str | None = None
+    date_completed: str | None = None
+    note: str = ""
 
 
 @dataclass(frozen=True)

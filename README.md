@@ -1,35 +1,37 @@
 # Cybersecurity Career Roadmap
 
-An offline-first Windows desktop application that turns a user-provided cybersecurity career workbook into a local, structured roadmap. The project is being developed in reviewable releases. **v0.1.0 is the Foundation release.**
+An offline-first Windows desktop application that turns the cybersecurity career workbook into a searchable, trackable roadmap. The project is developed in reviewable releases. **v0.2.0 is the Roadmap Engine release.**
 
 The source workbook remains authoritative. The importer stores the source sheets, populated cells, formulas, saved formula values, and source coordinates in SQLite. It also creates normalized records for task-like rows so later releases can add progression features without losing workbook context. The original workbook is opened read-only and is never saved by the application.
 
-## v0.1.0 features
+## v0.2.0 features
 
-- PySide6 desktop window with Dashboard, Roadmap, and Import data pages
-- SQLite storage with a versioned schema
-- Excel `.xlsx` and `.xlsm` import
-- Source-preserving storage for all visible sheets, values, formulas, cached values, validation ranges, chart references, and source cell locations
-- Normalized records for missions, skills, certifications, projects, and learning objectives
-- Validation findings for incomplete source rows, formula cycles, inconsistent summary ranges, and workbook structure gaps
-- Idempotent re-import of an unchanged workbook
-- Local-only user data, excluded from Git
+- Browse all normalized missions, skills, certifications, projects, and learning objectives in one roadmap.
+- Search workbook-backed names, descriptions, categories, phases, notes, resources, and source details.
+- Filter by item type, category, phase, local progress status, original workbook status, and target year.
+- Switch the timeline grouping between month, year, phase, and source sheet order.
+- Track local status, progress percentage, dates, and notes without changing imported workbook values.
+- View source status and locally tracked status side by side; reset a local override to the source-derived state.
+- See core mission progress update on the dashboard.
+- Import `.xlsx` and `.xlsm` workbooks into versioned SQLite storage that preserves source values, formulas, cached values, validation ranges, chart references, and cell coordinates.
 
-Later features such as editable progress, XP awards, quests, skill trees, achievements, analytics, backup/restore, and Excel export are tracked in [ROADMAP.md](ROADMAP.md). They are not part of v0.1.0.
+XP awards, quests, skill trees, achievements, analytics, backup/restore, and Excel export are tracked in [ROADMAP.md](ROADMAP.md) for later releases.
 
 ## Screenshot
 
-The image below shows the data-free first-run screen. The app reads the workbook without modifying it and keeps imported progress data in the user's local SQLite database.
+The first image shows the data-free first-run screen. The roadmap screenshot uses synthetic test data. The app reads the workbook without modifying it and keeps imported progress data in the user's local SQLite database.
 
 ![Cybersecurity Career Roadmap first-run dashboard](docs/screenshots/v0.1-first-run.png)
+
+![Cybersecurity Career Roadmap v0.2 roadmap page with synthetic data](docs/screenshots/v0.2-roadmap.png)
 
 ## Installation
 
 Python 3.11 or newer is recommended on Windows 10/11.
 
 ```powershell
-git clone <repository-url>
-cd CybersecurityRoadmap
+git clone https://github.com/ZeroTrace-LPT/gamified-roadmap.git
+cd gamified-roadmap
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
 python -m pip install -r requirements.txt
@@ -71,12 +73,12 @@ app/
   importers/    Excel parsing and validation
   models/       Typed domain records
   services/     Database-backed application queries
-  ui/           PySide6 shell, theme, and pages
+  ui/           PySide6 shell, theme, pages, and progress dialogs
 tests/          Importer and persistence tests
 scripts/        Windows packaging helpers
 ```
 
-The SQLite database is local user data. Do not commit it, the original workbook, credentials, lab secrets, or portfolio evidence. `.gitignore` excludes SQLite files and Excel workbooks by default.
+The SQLite database is local user data. Do not commit it, credentials, lab secrets, or portfolio evidence. `.gitignore` excludes SQLite files and local Excel workbooks by default.
 
 ## Contribution
 

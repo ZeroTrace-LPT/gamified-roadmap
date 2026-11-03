@@ -5,7 +5,7 @@ from __future__ import annotations
 import sqlite3
 from pathlib import Path
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS schema_migrations (
@@ -97,6 +97,16 @@ CREATE INDEX IF NOT EXISTS idx_roadmap_items_period
 CREATE INDEX IF NOT EXISTS idx_roadmap_items_category
     ON roadmap_items(workbook_id, category, item_type);
 
+CREATE TABLE IF NOT EXISTS roadmap_progress (
+    item_id TEXT PRIMARY KEY REFERENCES roadmap_items(item_id) ON DELETE CASCADE,
+    status TEXT NOT NULL CHECK (status IN ('Not started', 'In progress', 'Completed', 'Blocked')),
+    progress_percent INTEGER NOT NULL CHECK (progress_percent BETWEEN 0 AND 100),
+    date_started TEXT,
+    date_completed TEXT,
+    note TEXT NOT NULL DEFAULT '',
+    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
 CREATE TABLE IF NOT EXISTS import_issues (
     issue_id INTEGER PRIMARY KEY AUTOINCREMENT,
     workbook_id TEXT NOT NULL REFERENCES workbooks(workbook_id) ON DELETE CASCADE,
@@ -127,10 +137,10 @@ def connect_database(path: str | Path) -> sqlite3.Connection:
 
 
 def initialize_database(connection: sqlite3.Connection) -> None:
-    """Apply idempotent schema creation and record the current migration."""
+    """Apply additive, idempotent schema updates and record applied versions."""
     with connection:
         connection.executescript(SCHEMA)
-        connection.execute(
+        connection.executemany(
             "INSERT OR IGNORE INTO schema_migrations(version) VALUES (?)",
-            (SCHEMA_VERSION,),
+            ((version,) for version in range(1, SCHEMA_VERSION + 1)),
         )

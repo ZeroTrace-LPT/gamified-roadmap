@@ -79,7 +79,7 @@ class DashboardView(QWidget):
         cards.setHorizontalSpacing(12)
         cards.setVerticalSpacing(12)
         cards.addWidget(_card("Total XP", f"{data['xp']:,}", "Imported from the workbook's saved summary"), 0, 0)
-        cards.addWidget(_card("Core missions", f"{data['roadmap_completed']} / {data['roadmap_total']}", "62 monthly milestones in the source plan"), 0, 1)
+        cards.addWidget(_card("Core missions", f"{data['roadmap_completed']} / {data['roadmap_total']}", "Completed in local progress tracking"), 0, 1)
         cards.addWidget(_card("Roadmap records", f"{data['record_total']:,}", "Normalized from task-like source rows"), 0, 2)
         self.layout.addLayout(cards)
 
@@ -106,6 +106,11 @@ class DashboardView(QWidget):
         mission_heading.setObjectName("eyebrow")
         mission_title = QLabel(current["name"] if current else "No incomplete mission found")
         mission_title.setStyleSheet("font-size: 15pt; font-weight: 650; color: #f3f4f6;")
+        mission_progress = QLabel(
+            f"Local progress: {current['progress_status']} · {current['progress_percent']}%"
+            if current else ""
+        )
+        mission_progress.setObjectName("muted")
         mission_text = QLabel(current["description"] if current else "")
         mission_text.setWordWrap(True)
         mission_text.setObjectName("muted")
@@ -116,6 +121,7 @@ class DashboardView(QWidget):
         metadata.setObjectName("eyebrow")
         mission_layout.addWidget(mission_heading)
         mission_layout.addWidget(mission_title)
+        mission_layout.addWidget(mission_progress)
         mission_layout.addWidget(metadata)
         mission_layout.addWidget(mission_text)
         self.layout.addWidget(mission_card)

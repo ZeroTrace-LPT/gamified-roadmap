@@ -6,19 +6,26 @@ from pathlib import Path
 
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
-    QButtonGroup, QFileDialog, QFrame, QHBoxLayout, QLabel, QMainWindow,
+    QButtonGroup, QDialog, QFileDialog, QFrame, QHBoxLayout, QLabel, QMainWindow,
     QMessageBox, QPushButton, QStackedWidget, QVBoxLayout, QWidget,
 )
 
 from app import __version__
 from app.importers.excel_importer import import_excel
 from app.services.roadmap_service import (
+    clear_item_progress,
+    get_roadmap_filter_options,
+    get_roadmap_item,
+    get_roadmap_items,
+    save_item_progress,
+)
+from app.services.roadmap_service import (
     get_active_workbook,
-    get_core_roadmap,
     get_dashboard_data,
     get_import_issues,
     get_source_sheets,
 )
+from app.ui.dialogs.progress_dialog import ProgressDialog
 from app.ui.views.dashboard_view import DashboardView
 from app.ui.views.import_view import ImportView
 from app.ui.views.roadmap_view import RoadmapView
@@ -57,6 +64,8 @@ class MainWindow(QMainWindow):
         self.pages = QStackedWidget()
         self.dashboard = DashboardView(self.choose_workbook, lambda: self.navigate(1))
         self.roadmap = RoadmapView()
+        self.roadmap.filters_changed.connect(self.refresh_roadmap)
+        self.roadmap.progress_edit_requested.connect(self.edit_item_progress)
         self.import_page = ImportView(self.choose_workbook)
         self.pages.addWidget(self.dashboard)
         self.pages.addWidget(self.roadmap)
@@ -94,12 +103,48 @@ class MainWindow(QMainWindow):
     def refresh_pages(self) -> None:
         dashboard_data = get_dashboard_data(self.connection)
         self.dashboard.refresh(dashboard_data)
-        self.roadmap.refresh(get_core_roadmap(self.connection))
+        self.roadmap.set_filter_options(get_roadmap_filter_options(self.connection))
+        self.refresh_roadmap()
         self.import_page.refresh(
             get_active_workbook(self.connection),
             get_source_sheets(self.connection),
             get_import_issues(self.connection),
         )
+
+    def refresh_roadmap(self) -> None:
+        records = get_roadmap_items(self.connection, **self.roadmap.filter_values())
+        self.roadmap.refresh(records)
+
+    def edit_item_progress(self, item_id: str) -> None:
+        record = get_roadmap_item(self.connection, item_id)
+        if record is None:
+            QMessageBox.warning(self, "Roadmap item unavailable", "This item is no longer in the active workbook.")
+            self.refresh_pages()
+            return
+        dialog = ProgressDialog(record, self)
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            return
+        try:
+            if dialog.reset_requested:
+                answer = QMessageBox.question(
+                    self,
+                    "Reset local progress",
+                    "Remove this item's local progress and return to its source-derived display state?",
+                    QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                    QMessageBox.StandardButton.No,
+                )
+                if answer != QMessageBox.StandardButton.Yes:
+                    return
+                clear_item_progress(self.connection, item_id)
+                message = "Local progress reset · workbook data remains unchanged"
+            else:
+                save_item_progress(self.connection, item_id, dialog.progress_update())
+                message = "Local progress saved · workbook data remains unchanged"
+        except (KeyError, ValueError) as error:
+            QMessageBox.warning(self, "Progress not saved", str(error))
+            return
+        self.refresh_pages()
+        self.statusBar().showMessage(message)
 
     def choose_workbook(self) -> None:
         filename, _ = QFileDialog.getOpenFileName(
