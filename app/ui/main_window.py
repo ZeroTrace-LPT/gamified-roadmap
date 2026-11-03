@@ -20,6 +20,7 @@ from app.services.roadmap_service import (
     save_item_progress,
 )
 from app.services.gamification_service import get_gamification_data, sync_xp_awards
+from app.services.quest_service import get_quest_board, set_prerequisites_verified
 from app.services.roadmap_service import (
     get_active_workbook,
     get_dashboard_data,
@@ -29,6 +30,7 @@ from app.services.roadmap_service import (
 from app.ui.dialogs.progress_dialog import ProgressDialog
 from app.ui.views.dashboard_view import DashboardView
 from app.ui.views.import_view import ImportView
+from app.ui.views.quest_view import QuestView
 from app.ui.views.roadmap_view import RoadmapView
 
 
@@ -67,15 +69,20 @@ class MainWindow(QMainWindow):
         self.roadmap = RoadmapView()
         self.roadmap.filters_changed.connect(self.refresh_roadmap)
         self.roadmap.progress_edit_requested.connect(self.edit_item_progress)
+        self.quest = QuestView()
+        self.quest.filters_changed.connect(self.refresh_quests)
+        self.quest.progress_edit_requested.connect(self.edit_item_progress)
+        self.quest.prerequisite_review_requested.connect(self.review_quest_prerequisites)
         self.import_page = ImportView(self.choose_workbook)
         self.pages.addWidget(self.dashboard)
         self.pages.addWidget(self.roadmap)
+        self.pages.addWidget(self.quest)
         self.pages.addWidget(self.import_page)
 
         self.nav_group = QButtonGroup(self)
         self.nav_group.setExclusive(True)
         self.nav_buttons: list[QPushButton] = []
-        for index, label in enumerate(("Dashboard", "Roadmap", "Import data")):
+        for index, label in enumerate(("Dashboard", "Roadmap", "Quests", "Import data")):
             button = QPushButton(label)
             button.setCheckable(True)
             button.setCursor(Qt.CursorShape.PointingHandCursor)
@@ -107,6 +114,7 @@ class MainWindow(QMainWindow):
         self.dashboard.refresh(dashboard_data)
         self.roadmap.set_filter_options(get_roadmap_filter_options(self.connection))
         self.refresh_roadmap()
+        self.refresh_quests()
         self.import_page.refresh(
             get_active_workbook(self.connection),
             get_source_sheets(self.connection),
@@ -116,6 +124,20 @@ class MainWindow(QMainWindow):
     def refresh_roadmap(self) -> None:
         records = get_roadmap_items(self.connection, **self.roadmap.filter_values())
         self.roadmap.refresh(records)
+
+    def refresh_quests(self) -> None:
+        board = get_quest_board(self.connection, **self.quest.filter_values())
+        self.quest.refresh(board)
+
+    def review_quest_prerequisites(self, item_id: str, verified: bool) -> None:
+        try:
+            set_prerequisites_verified(self.connection, item_id, verified)
+        except (KeyError, ValueError) as error:
+            QMessageBox.warning(self, "Prerequisites not updated", str(error))
+            return
+        self.refresh_quests()
+        message = "Source prerequisites verified" if verified else "Prerequisite verification removed"
+        self.statusBar().showMessage(message, 6000)
 
     def edit_item_progress(self, item_id: str) -> None:
         before = get_gamification_data(self.connection)
@@ -176,7 +198,7 @@ class MainWindow(QMainWindow):
             return
 
         self.refresh_pages()
-        self.navigate(2)
+        self.navigate(3)
         if result.already_imported:
             title = "Workbook already imported"
             message = "This exact workbook was already imported. The existing local snapshot was reactivated without replacing it."

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import tempfile
 import unittest
+import json
 from pathlib import Path
 
 from openpyxl import Workbook, load_workbook
@@ -13,6 +14,7 @@ from app.importers.excel_importer import import_excel
 from app.gamification.progression import calculate_progression, parse_level_definitions
 from app.models.roadmap import ProgressUpdate
 from app.services.gamification_service import get_gamification_data, sync_xp_awards
+from app.services.quest_service import get_quest_board, get_recommended_quests, set_prerequisites_verified
 from app.services.roadmap_service import (
     clear_item_progress,
     get_dashboard_data,
@@ -280,6 +282,77 @@ class ExcelImporterTests(unittest.TestCase):
         self.assertEqual(data["current_level"], 2)
         self.assertEqual(sync_xp_awards(self.connection), 0)
 
+    def test_quest_classes_recommendations_and_prerequisite_review(self) -> None:
+        workbook = load_workbook(self.workbook_path)
+        workbook["Projects"].append([
+            "P02", "Final Purple Team Exercise", "Purple Team",
+            "Run a final purple-team detection exercise", "Year 3", 1000, "Not Started",
+        ])
+        starter = workbook["12-Month Starter"]
+        for column, value in enumerate((
+            "Week 2", "", "Web Security", "PortSwigger Lab Sprint",
+            "PortSwigger fundamentals", "Complete the guided labs", "Resource 1", "",
+            "Mandatory", 150, "Not Started",
+        ), 1):
+            starter.cell(8, column, value)
+        workbook["My Certifications"]["K25"] = "After Networking"
+        workbook.save(self.workbook_path)
+        import_excel(self.connection, self.workbook_path)
+
+        quests = get_quest_board(self.connection)
+        by_name = {item["name"]: item for item in quests["items"]}
+        self.assertEqual(by_name["Network+ / Linux / Git"]["quest_type"], "Main Quest")
+        self.assertEqual(by_name["Networking"]["quest_type"], "Side Quest")
+        self.assertEqual(by_name["Cisco CCNA"]["quest_type"], "Certification Quest")
+        self.assertEqual(by_name["PortSwigger Lab Sprint"]["quest_type"], "Lab Quest")
+        self.assertEqual(by_name["Homelab v1"]["quest_type"], "Project Quest")
+        self.assertIn("Lab", by_name["Homelab v1"]["quest_tags"])
+        self.assertTrue(by_name["Final Purple Team Exercise"]["is_boss_quest"])
+        self.assertEqual(by_name["Final Purple Team Exercise"]["xp_reward"], 1000)
+        self.assertEqual(by_name["Cisco CCNA"]["quest_readiness"], "Needs review")
+        self.assertNotIn(
+            by_name["Cisco CCNA"]["item_id"],
+            {item["item_id"] for item in quests["recommendations"]},
+        )
+        self.assertEqual(quests["recommendations"][0]["quest_type"], "Main Quest")
+        boss_board = get_quest_board(self.connection, quest_type="Boss Quest")
+        self.assertIn("Final Purple Team Exercise", [item["name"] for item in boss_board["items"]])
+
+        self.connection.execute(
+            "UPDATE roadmap_items SET prerequisites_json=? WHERE item_id=?",
+            (json.dumps(["Networking"]), by_name["Cisco CCNA"]["item_id"]),
+        )
+        self.connection.commit()
+        locked = get_quest_board(self.connection)
+        locked_cisco = next(item for item in locked["items"] if item["name"] == "Cisco CCNA")
+        self.assertEqual(locked_cisco["quest_readiness"], "Locked")
+        self.assertEqual(locked_cisco["missing_prerequisites"][0]["name"], "Networking")
+
+        networking = by_name["Networking"]
+        save_item_progress(
+            self.connection,
+            networking["item_id"],
+            ProgressUpdate(status="Completed", progress_percent=100),
+        )
+        after_dependency = get_quest_board(self.connection)
+        cisco_after_dependency = next(
+            item for item in after_dependency["items"] if item["name"] == "Cisco CCNA"
+        )
+        self.assertEqual(cisco_after_dependency["quest_readiness"], "Needs review")
+        set_prerequisites_verified(self.connection, cisco_after_dependency["item_id"], True)
+        available = get_quest_board(self.connection)
+        cisco_available = next(item for item in available["items"] if item["name"] == "Cisco CCNA")
+        self.assertEqual(cisco_available["quest_readiness"], "Available")
+        recommended = get_recommended_quests(available["items"], limit=30)
+        self.assertIn(cisco_available["item_id"], {item["item_id"] for item in recommended})
+
+        set_prerequisites_verified(self.connection, cisco_available["item_id"], False)
+        revoked = get_quest_board(self.connection)
+        self.assertEqual(
+            next(item for item in revoked["items"] if item["name"] == "Cisco CCNA")["quest_readiness"],
+            "Needs review",
+        )
+
     def test_search_filters_and_year_sort_use_source_fields(self) -> None:
         import_excel(self.connection, self.workbook_path)
         search = get_roadmap_items(self.connection, query="linux")
@@ -306,7 +379,8 @@ class ExcelImporterTests(unittest.TestCase):
         source_count = self.connection.execute("SELECT COUNT(*) FROM source_cells").fetchone()[0]
         self.connection.execute("DROP TABLE roadmap_progress")
         self.connection.execute("DROP TABLE xp_transactions")
-        self.connection.execute("DELETE FROM schema_migrations WHERE version IN (2, 3)")
+        self.connection.execute("DROP TABLE quest_prerequisite_reviews")
+        self.connection.execute("DELETE FROM schema_migrations WHERE version IN (2, 3, 4)")
         self.connection.commit()
         self.connection.close()
 
@@ -314,7 +388,7 @@ class ExcelImporterTests(unittest.TestCase):
         self.assertEqual(self.connection.execute("SELECT COUNT(*) FROM roadmap_items").fetchone()[0], item_count)
         self.assertEqual(self.connection.execute("SELECT COUNT(*) FROM source_cells").fetchone()[0], source_count)
         self.assertEqual(
-            self.connection.execute("SELECT MAX(version) FROM schema_migrations").fetchone()[0], 3
+            self.connection.execute("SELECT MAX(version) FROM schema_migrations").fetchone()[0], 4
         )
         self.assertEqual(
             self.connection.execute("SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='roadmap_progress'").fetchone()[0],
@@ -322,6 +396,10 @@ class ExcelImporterTests(unittest.TestCase):
         )
         self.assertEqual(
             self.connection.execute("SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='xp_transactions'").fetchone()[0],
+            1,
+        )
+        self.assertEqual(
+            self.connection.execute("SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='quest_prerequisite_reviews'").fetchone()[0],
             1,
         )
 
