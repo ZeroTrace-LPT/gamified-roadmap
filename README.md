@@ -1,10 +1,10 @@
 # Cybersecurity Career Roadmap
 
-An offline-first Windows desktop application that turns the cybersecurity career workbook into a searchable, trackable, gamified roadmap. The project is developed in reviewable releases. **v0.4.0 adds a prerequisite-aware quest board.**
+An offline-first Windows desktop application that turns the cybersecurity career workbook into a searchable, trackable, gamified roadmap. The project is developed in reviewable releases. **v0.5.0 adds a workbook-backed cybersecurity skill tree.**
 
 The source workbook remains authoritative. The importer stores the source sheets, populated cells, formulas, saved formula values, and source coordinates in SQLite. It also creates normalized records for task-like rows so later releases can add progression features without losing workbook context. The original workbook is opened read-only and is never saved by the application.
 
-## v0.4.0 features
+## v0.5.0 features
 
 - Browse all normalized missions, skills, certifications, projects, and learning objectives in one roadmap.
 - Search workbook-backed names, descriptions, categories, phases, notes, resources, and source details.
@@ -21,15 +21,19 @@ The source workbook remains authoritative. The importer stores the source sheets
 - See recommended next quests based on active progress, workbook order, source priorities, and prerequisite readiness.
 - Review structured prerequisite references and explicitly verify narrative prerequisite notes; confirmations stay in SQLite and do not change Excel data.
 - Identify Boss quests from explicit source milestone, capstone, or final exercise signals. Rewards remain the workbook's values.
+- Browse Skill Matrix skills and Beyond 25 specializations grouped by their source Track values.
+- View workbook target ages, specialization timeframes, source XP, progress, and specialization resources.
+- See available, locked, or review-needed skill states from explicit prerequisite data. The tree does not infer skill dependencies.
+- Import explicit prerequisite columns from workbook sheets as structured links while keeping narrative prerequisite notes separate.
 - Import `.xlsx` and `.xlsm` workbooks into versioned SQLite storage that preserves source values, formulas, cached values, validation ranges, chart references, and cell coordinates.
 
 Career XP includes monthly missions and all normalized project rows. The workbook's Dashboard formula currently refers to Projects rows 2–12, while the Projects sheet contains additional records through row 18; the importer reports that source inconsistency. This release includes all imported project rewards so records are not silently left out. The source formula itself remains preserved unchanged.
 
-Skill trees, achievements, analytics, backup/restore, and Excel export are tracked in [ROADMAP.md](ROADMAP.md) for later releases.
+Achievements, analytics, backup/restore, and Excel export are tracked in [ROADMAP.md](ROADMAP.md) for later releases.
 
 ## Screenshot
 
-The first image shows the data-free first-run screen. The roadmap screenshot uses synthetic test data. The app reads the workbook without modifying it and keeps imported progress data in the user's local SQLite database.
+The first image shows the data-free first-run screen. The roadmap, quest, and skill tree screenshots use synthetic test data. The app reads the workbook without modifying it and keeps imported progress data in the user's local SQLite database.
 
 ![Cybersecurity Career Roadmap first-run dashboard](docs/screenshots/v0.1-first-run.png)
 
@@ -38,6 +42,8 @@ The first image shows the data-free first-run screen. The roadmap screenshot use
 ![Cybersecurity Career Roadmap v0.3 dashboard with synthetic data](docs/screenshots/v0.3-dashboard.png)
 
 ![Cybersecurity Career Roadmap v0.4 quest board with synthetic data](docs/screenshots/v0.4-quest-board.png)
+
+![Cybersecurity Career Roadmap v0.5 skill tree with synthetic data](docs/screenshots/v0.5-skill-tree.png)
 
 ## Installation
 
@@ -76,7 +82,7 @@ The script creates a PyInstaller onedir build at `dist\CybersecurityRoadmap\`. I
 python -m unittest discover -s tests -v
 ```
 
-The importer, database, progression, quest, and XP service modules can be tested without starting Qt. The desktop interface requires PySide6.
+The importer, database, progression, quest, skill tree, and XP service modules can be tested without starting Qt. The desktop interface requires PySide6.
 
 ## Architecture
 
@@ -88,7 +94,7 @@ app/
   quests/      Source-derived quest classification rules
   importers/    Excel parsing and validation
   models/       Typed domain records
-  services/     Database-backed application queries
+  services/     Database-backed roadmap, quest, and skill tree queries
   ui/           PySide6 shell, theme, pages, and progress dialogs
 tests/          Importer and persistence tests
 scripts/        Windows packaging helpers

@@ -15,6 +15,7 @@ from app.gamification.progression import calculate_progression, parse_level_defi
 from app.models.roadmap import ProgressUpdate
 from app.services.gamification_service import get_gamification_data, sync_xp_awards
 from app.services.quest_service import get_quest_board, get_recommended_quests, set_prerequisites_verified
+from app.services.skill_tree_service import get_skill_tree
 from app.services.roadmap_service import (
     clear_item_progress,
     get_dashboard_data,
@@ -352,6 +353,65 @@ class ExcelImporterTests(unittest.TestCase):
             next(item for item in revoked["items"] if item["name"] == "Cisco CCNA")["quest_readiness"],
             "Needs review",
         )
+
+    def test_skill_tree_uses_workbook_tracks_timing_and_explicit_prerequisites(self) -> None:
+        workbook = load_workbook(self.workbook_path)
+        workbook["Skill Matrix"].append([
+            "Linux", "Foundation", "21", "Bash, permissions, processes", "Not Started", 400,
+        ])
+        workbook["Skill Matrix"]["G1"] = "Prerequisites"
+        workbook["Skill Matrix"]["G3"] = "Networking"
+        specializations = workbook["Beyond 25"]
+        for column, value in enumerate((
+            "Jan-Mar 2032", "Cloud Security", "Azure security",
+            "Identity + network + workload security", "Review an Azure lab",
+            "azure-review.md", "Azure tools", "High", "Not Started", 500,
+        ), 1):
+            specializations.cell(5, column, value)
+        for column, value in enumerate((
+            "Mar-Apr 2032", "Malware Analysis", "Fundamentals", "Static triage",
+            "Build an isolated malware-analysis workflow", "malware-static-triage.md",
+            "REMnux / PEStudio", "High", "Not Started", 250,
+        ), 1):
+            specializations.cell(6, column, value)
+        workbook.save(self.workbook_path)
+        import_excel(self.connection, self.workbook_path)
+
+        tree = get_skill_tree(self.connection)
+        self.assertEqual(tree["counts"]["total"], 4)
+        self.assertEqual(tree["counts"]["branches"], 3)
+        self.assertEqual(tree["counts"]["locked"], 1)
+        self.assertEqual(
+            {node["name"] for node in tree["items"] if not node["skill_prerequisites"]},
+            {"Networking", "Identity + network + workload security", "Static triage"},
+        )
+        by_name = {node["name"]: node for node in tree["items"]}
+        self.assertEqual(by_name["Networking"]["skill_branch"], "Foundation")
+        self.assertEqual(by_name["Networking"]["skill_timing_label"], "Target age")
+        self.assertEqual(by_name["Networking"]["skill_timing"], "20")
+        self.assertEqual(by_name["Static triage"]["skill_branch"], "Malware Analysis")
+        self.assertEqual(by_name["Static triage"]["skill_timing_label"], "Timeframe")
+        self.assertEqual(by_name["Static triage"]["xp_reward"], 250)
+        self.assertIn("REMnux", by_name["Static triage"]["resources_json"])
+
+        locked = get_skill_tree(self.connection)
+        linux = next(node for node in locked["items"] if node["name"] == "Linux")
+        self.assertEqual(linux["skill_readiness"], "Locked")
+        self.assertEqual(linux["skill_missing_prerequisites"][0]["name"], "Networking")
+
+        networking = next(node for node in locked["items"] if node["name"] == "Networking")
+        save_item_progress(
+            self.connection,
+            networking["item_id"],
+            ProgressUpdate(status="Completed", progress_percent=100),
+        )
+        unlocked = get_skill_tree(self.connection)
+        linux = next(node for node in unlocked["items"] if node["name"] == "Linux")
+        self.assertEqual(linux["skill_readiness"], "Available")
+        self.assertEqual(linux["skill_prerequisites"][0]["progress_status"], "Completed")
+
+        filtered = get_skill_tree(self.connection, branch="Malware Analysis", query="REMnux")
+        self.assertEqual([node["name"] for node in filtered["items"]], ["Static triage"])
 
     def test_search_filters_and_year_sort_use_source_fields(self) -> None:
         import_excel(self.connection, self.workbook_path)

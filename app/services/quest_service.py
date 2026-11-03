@@ -2,10 +2,14 @@
 
 from __future__ import annotations
 
-import json
 from typing import Any, Iterable
 
-from app.quests.rules import QUEST_FILTERS, classify_quest
+from app.quests.rules import classify_quest
+from app.services.prerequisite_service import (
+    get_reviewed_prerequisite_ids,
+    prerequisite_readiness,
+    resolve_prerequisites,
+)
 from app.services.roadmap_service import get_active_workbook, get_roadmap_items
 
 
@@ -22,59 +26,6 @@ _PRIORITY_RANK = {
     "future": 7,
     "done": 8,
 }
-
-
-def _parse_references(raw: Any) -> tuple[list[Any], bool]:
-    if raw in (None, ""):
-        return [], False
-    try:
-        value = json.loads(raw) if isinstance(raw, str) else raw
-    except (TypeError, json.JSONDecodeError):
-        return [], True
-    if isinstance(value, list):
-        return value, False
-    return ([value] if value else []), False
-
-
-def _resolve_prerequisites(
-    item: dict[str, Any],
-    items_by_id: dict[str, dict[str, Any]],
-    items_by_name: dict[str, list[dict[str, Any]]],
-) -> tuple[list[dict[str, Any]], list[str]]:
-    references, malformed = _parse_references(item.get("prerequisites_json"))
-    resolved: list[dict[str, Any]] = []
-    unresolved = ["Malformed structured prerequisite data"] if malformed else []
-
-    for reference in references:
-        if isinstance(reference, dict):
-            item_id = reference.get("item_id") or reference.get("id")
-            name = reference.get("name") or reference.get("title")
-        else:
-            item_id = reference if isinstance(reference, str) and reference in items_by_id else None
-            name = reference if isinstance(reference, str) and not item_id else None
-
-        if item_id:
-            candidate = items_by_id.get(str(item_id))
-            candidates = [candidate] if candidate else []
-        elif name:
-            candidates = items_by_name.get(str(name).strip().casefold(), [])
-        else:
-            candidates = []
-
-        if len(candidates) != 1:
-            label = str(name or item_id or reference).strip()
-            unresolved.append(f"Unresolved or ambiguous prerequisite: {label}")
-            continue
-
-        prerequisite = candidates[0]
-        resolved.append({
-            "item_id": prerequisite["item_id"],
-            "name": prerequisite["name"],
-            "progress_status": prerequisite["progress_status"],
-            "complete": prerequisite["progress_status"] == "Completed",
-        })
-
-    return resolved, unresolved
 
 
 def _enrich_quests(connection: Any) -> list[dict[str, Any]]:
@@ -98,32 +49,16 @@ def _enrich_quests(connection: Any) -> list[dict[str, Any]]:
     for item in items:
         items_by_name.setdefault(item["name"].strip().casefold(), []).append(item)
 
-    verified_ids = {
-        row["item_id"]
-        for row in connection.execute(
-            """SELECT qpr.item_id FROM quest_prerequisite_reviews qpr
-               JOIN roadmap_items i ON i.item_id=qpr.item_id
-               WHERE i.workbook_id=?""",
-            (workbook_id,),
-        ).fetchall()
-    }
+    verified_ids = get_reviewed_prerequisite_ids(connection, workbook_id)
 
     for item in items:
         classification = classify_quest(item)
-        prerequisites, unresolved = _resolve_prerequisites(item, items_by_id, items_by_name)
+        prerequisites, unresolved = resolve_prerequisites(item, items_by_id, items_by_name)
         missing = [entry for entry in prerequisites if not entry["complete"]]
         source_note = str(item.get("prerequisite_notes") or "").strip()
         note_review_required = bool(source_note)
         verified = item["item_id"] in verified_ids
-
-        if unresolved:
-            readiness = "Needs review"
-        elif missing:
-            readiness = "Locked"
-        elif note_review_required and not verified:
-            readiness = "Needs review"
-        else:
-            readiness = "Available"
+        readiness = prerequisite_readiness(item, prerequisites, unresolved, verified)
 
         item.update({
             "quest_type": classification.quest_type,
