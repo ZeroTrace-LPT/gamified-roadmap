@@ -40,6 +40,7 @@ class RoadmapItem:
     priority: str = ""
     xp_reward: int | None = None
     xp_earned: int | None = None
+    prerequisites: tuple[str, ...] = field(default_factory=tuple)
     prerequisite_notes: str = ""
     resources: tuple[str, ...] = field(default_factory=tuple)
     notes: str = ""

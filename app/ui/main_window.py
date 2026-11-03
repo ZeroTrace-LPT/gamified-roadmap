@@ -21,6 +21,7 @@ from app.services.roadmap_service import (
 )
 from app.services.gamification_service import get_gamification_data, sync_xp_awards
 from app.services.quest_service import get_quest_board, set_prerequisites_verified
+from app.services.skill_tree_service import get_skill_tree
 from app.services.roadmap_service import (
     get_active_workbook,
     get_dashboard_data,
@@ -32,6 +33,7 @@ from app.ui.views.dashboard_view import DashboardView
 from app.ui.views.import_view import ImportView
 from app.ui.views.quest_view import QuestView
 from app.ui.views.roadmap_view import RoadmapView
+from app.ui.views.skill_tree_view import SkillTreeView
 
 
 class MainWindow(QMainWindow):
@@ -73,16 +75,21 @@ class MainWindow(QMainWindow):
         self.quest.filters_changed.connect(self.refresh_quests)
         self.quest.progress_edit_requested.connect(self.edit_item_progress)
         self.quest.prerequisite_review_requested.connect(self.review_quest_prerequisites)
+        self.skill_tree = SkillTreeView()
+        self.skill_tree.filters_changed.connect(self.refresh_skill_tree)
+        self.skill_tree.progress_edit_requested.connect(self.edit_item_progress)
+        self.skill_tree.prerequisite_review_requested.connect(self.review_skill_prerequisites)
         self.import_page = ImportView(self.choose_workbook)
         self.pages.addWidget(self.dashboard)
         self.pages.addWidget(self.roadmap)
         self.pages.addWidget(self.quest)
+        self.pages.addWidget(self.skill_tree)
         self.pages.addWidget(self.import_page)
 
         self.nav_group = QButtonGroup(self)
         self.nav_group.setExclusive(True)
         self.nav_buttons: list[QPushButton] = []
-        for index, label in enumerate(("Dashboard", "Roadmap", "Quests", "Import data")):
+        for index, label in enumerate(("Dashboard", "Roadmap", "Quests", "Skill Tree", "Import data")):
             button = QPushButton(label)
             button.setCheckable(True)
             button.setCursor(Qt.CursorShape.PointingHandCursor)
@@ -115,6 +122,7 @@ class MainWindow(QMainWindow):
         self.roadmap.set_filter_options(get_roadmap_filter_options(self.connection))
         self.refresh_roadmap()
         self.refresh_quests()
+        self.refresh_skill_tree()
         self.import_page.refresh(
             get_active_workbook(self.connection),
             get_source_sheets(self.connection),
@@ -129,6 +137,10 @@ class MainWindow(QMainWindow):
         board = get_quest_board(self.connection, **self.quest.filter_values())
         self.quest.refresh(board)
 
+    def refresh_skill_tree(self) -> None:
+        tree = get_skill_tree(self.connection, **self.skill_tree.filter_values())
+        self.skill_tree.refresh(tree)
+
     def review_quest_prerequisites(self, item_id: str, verified: bool) -> None:
         try:
             set_prerequisites_verified(self.connection, item_id, verified)
@@ -136,6 +148,16 @@ class MainWindow(QMainWindow):
             QMessageBox.warning(self, "Prerequisites not updated", str(error))
             return
         self.refresh_quests()
+        message = "Source prerequisites verified" if verified else "Prerequisite verification removed"
+        self.statusBar().showMessage(message, 6000)
+
+    def review_skill_prerequisites(self, item_id: str, verified: bool) -> None:
+        try:
+            set_prerequisites_verified(self.connection, item_id, verified)
+        except (KeyError, ValueError) as error:
+            QMessageBox.warning(self, "Prerequisites not updated", str(error))
+            return
+        self.refresh_skill_tree()
         message = "Source prerequisites verified" if verified else "Prerequisite verification removed"
         self.statusBar().showMessage(message, 6000)
 
@@ -198,7 +220,7 @@ class MainWindow(QMainWindow):
             return
 
         self.refresh_pages()
-        self.navigate(3)
+        self.navigate(4)
         if result.already_imported:
             title = "Workbook already imported"
             message = "This exact workbook was already imported. The existing local snapshot was reactivated without replacing it."

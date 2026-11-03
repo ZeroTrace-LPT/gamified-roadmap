@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 import warnings
 from pathlib import Path
 from typing import Any
@@ -70,6 +71,46 @@ def _row_values(ws: Worksheet, row_number: int) -> dict[str, Any]:
     }
 
 
+_PREREQUISITE_HEADERS = {
+    "prerequisite", "prerequisites", "prereq", "prereqs",
+    "dependency", "dependencies", "dependson", "requires",
+    "requiredbefore", "unlockrequirement", "unlockrequirements",
+}
+
+
+def _structured_prerequisites(ws: Worksheet, row_number: int) -> tuple[str, ...]:
+    """Read explicit dependency columns while leaving narrative notes untouched."""
+    header_candidates: list[tuple[int, list[int]]] = []
+    for header_row in range(1, min(ws.max_row, 12) + 1):
+        columns = []
+        for column in range(1, ws.max_column + 1):
+            value = ws.cell(header_row, column).value
+            if not isinstance(value, str):
+                continue
+            normalized = re.sub(r"[^a-z]", "", value.casefold())
+            if normalized in _PREREQUISITE_HEADERS:
+                columns.append(column)
+        if columns:
+            header_candidates.append((header_row, columns))
+    if not header_candidates:
+        return ()
+
+    _, columns = max(header_candidates, key=lambda candidate: len(candidate[1]))
+    references: list[str] = []
+    for column in columns:
+        value = ws.cell(row_number, column).value
+        if value in (None, ""):
+            continue
+        if isinstance(value, (list, tuple, set)):
+            parts = [str(part).strip() for part in value if str(part).strip()]
+        else:
+            # Semicolons, newlines, and pipes are explicit multi-reference
+            # separators. Commas stay intact because some source titles contain them.
+            parts = [part.strip() for part in re.split(r"[;|\r\n]+", str(value)) if part.strip()]
+        references.extend(parts)
+    return tuple(references)
+
+
 def _item(
     ws: Worksheet,
     row_number: int,
@@ -112,6 +153,7 @@ def _item(
         priority=clean(priority),
         xp_reward=numeric_reward,
         xp_earned=numeric_earned,
+        prerequisites=_structured_prerequisites(ws, row_number),
         prerequisite_notes=clean(prerequisite_notes),
         resources=resource_values,
         notes=clean(notes),
@@ -432,15 +474,16 @@ def import_excel(connection: Any, source_path: str | Path) -> ImportResult:
                 """INSERT INTO roadmap_items(
                    item_id, workbook_id, source_sheet, source_row, item_type, name,
                    description, category, phase, target_period, status, priority,
-                   xp_reward, xp_earned, prerequisite_notes, resources_json, notes,
-                   source_record_json)
-                   VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                   xp_reward, xp_earned, prerequisites_json, prerequisite_notes,
+                   resources_json, notes, source_record_json)
+                   VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 (
                     f"{workbook_id}:{item.item_id}", workbook_id, item.source_sheet, item.source_row,
                     item.item_type, item.name, item.description, item.category,
                     item.phase, item.target_period, item.status, item.priority,
-                    item.xp_reward, item.xp_earned, item.prerequisite_notes,
-                    _dump(item.resources), item.notes, _dump(item.source_record),
+                    item.xp_reward, item.xp_earned, _dump(item.prerequisites),
+                    item.prerequisite_notes, _dump(item.resources), item.notes,
+                    _dump(item.source_record),
                 ),
             )
 

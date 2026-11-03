@@ -2,6 +2,24 @@
 
 All notable changes to this project are recorded here.
 
+## [0.5.0] - 2026-11-03
+
+### Added
+- Interactive skill tree containing Skill Matrix skills and Beyond 25 specializations grouped by workbook Track values.
+- Skill detail panel with source descriptions, target ages or timeframes, source XP, resources, status, progress, and prerequisite information.
+- Search and filters for source tracks, progress state, and unlock state.
+- Available, locked, and review-needed states based only on explicit source prerequisite data; no dependency edges are inferred.
+- Excel importer support for explicit prerequisite/dependency header columns, stored as structured references in SQLite.
+- Shared prerequisite resolution used by the quest board and skill tree.
+- Skill Tree page in the application sidebar.
+
+### Changed
+- Application version is now 0.5.0.
+
+### Known limitations
+- The current workbook contains no structured skill prerequisites. Its 39 skill and specialization nodes are grouped by source Track and have no dependency locks until explicit relationships are supplied in a workbook.
+- Skill Matrix `Target Age` values are displayed as written and are not converted to calendar years.
+
 ## [0.4.0] - 2026-11-03
 
 ### Added

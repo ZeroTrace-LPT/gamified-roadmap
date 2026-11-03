@@ -31,8 +31,9 @@ Each release has a defined review gate. Work on the next version starts after th
 
 ## v0.5.0 — Skill Tree
 
-- [ ] Skill branches and unlock relationships
-- [ ] Explicit prerequisite support where the source provides it
+- [x] Skill branches based on workbook Track values, with target ages and specialization timeframes
+- [x] Skill and specialization status, progress, source XP, and resource details
+- [x] Explicit prerequisite resolution and locked/available state without inferred dependency edges
 
 ## v0.6.0 — Dashboard
 
